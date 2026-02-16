@@ -3,15 +3,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
 from routes import course_routes, syllabus_routes, outcome_routes, book_routes
+from database import connect_to_mongo, close_mongo_connection
 
 load_dotenv()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Try to connect to MongoDB
+    print("🚀 Starting CourseWeaver API...")
+    try:
+        connect_to_mongo()
+    except Exception as e:
+        print(f"⚠️  MongoDB connection failed on startup: {e}")
+        print("⚠️  Application will continue but database operations may fail")
+    yield
+    # Shutdown: Close MongoDB connection
+    close_mongo_connection()
 
 app = FastAPI(
     title="CourseWeaver API",
     description="AI-powered university course design assistant",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS middleware

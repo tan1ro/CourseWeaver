@@ -12,7 +12,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def get_gemini_model():
     """Get the Gemini Flash model for faster responses"""
-    return genai.GenerativeModel('gemini-1.5-flash')
+    return genai.GenerativeModel('gemini-2.5-flash')
 
 def generate_course_syllabus(title: str, credits: str, ltp: str, audience: str) -> Dict[str, Any]:
     """Generate a complete course syllabus using Gemini"""

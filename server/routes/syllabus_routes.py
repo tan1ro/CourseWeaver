@@ -4,6 +4,7 @@ from database import get_syllabi_collection
 import os
 from docx import Document
 from PyPDF2 import PdfReader
+from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure
 
 router = APIRouter()
 
@@ -39,5 +40,13 @@ async def upload_syllabus(file: UploadFile = File(...)):
     if "error" in result:
         raise HTTPException(status_code=500, detail=result)
     # Save to DB
-    get_syllabi_collection().insert_one({"filename": file.filename, "analysis": result})
+    try:
+        get_syllabi_collection().insert_one({"filename": file.filename, "analysis": result})
+    except (ServerSelectionTimeoutError, ConnectionFailure) as e:
+        # Log the error but don't fail the request - analysis is still returned
+        print(f"⚠️ Warning: Failed to save to database: {e}")
+        print("⚠️ Analysis result returned but not persisted to database")
+    except Exception as e:
+        # Log other database errors
+        print(f"⚠️ Warning: Database error: {e}")
     return result 

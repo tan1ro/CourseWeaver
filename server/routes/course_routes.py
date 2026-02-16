@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from services.gemini_service import generate_course_syllabus
 from database import get_courses_collection
+from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure
 import logging
 
 # Set up logging
@@ -35,8 +36,12 @@ async def generate_course(course: CourseInput):
         # Save to DB
         try:
             get_courses_collection().insert_one({**course.dict(), **result})
-        except Exception as db_error:
+        except (ServerSelectionTimeoutError, ConnectionFailure) as db_error:
             logger.warning(f"Failed to save to database: {db_error}")
+            logger.warning("Course generated but not persisted to database")
+            # Don't fail the request if DB save fails
+        except Exception as db_error:
+            logger.warning(f"Database error: {db_error}")
             # Don't fail the request if DB save fails
         
         logger.info(f"Successfully generated course: {course.title}")

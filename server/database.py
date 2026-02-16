@@ -1,5 +1,6 @@
 from pymongo import MongoClient
 from pymongo.database import Database
+from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure
 import os
 from dotenv import load_dotenv
 
@@ -15,15 +16,30 @@ database: Database = None
 def connect_to_mongo():
     global client, database
     try:
-        client = MongoClient(MONGODB_URI)
+        # Add connection timeout and server selection timeout
+        client = MongoClient(
+            MONGODB_URI,
+            serverSelectionTimeoutMS=5000,  # 5 seconds timeout
+            connectTimeoutMS=5000,
+            socketTimeoutMS=5000
+        )
         database = client[DATABASE_NAME]
         # Test the connection
         client.admin.command('ping')
         print("✅ Connected to MongoDB!")
         return database
+    except (ServerSelectionTimeoutError, ConnectionFailure) as e:
+        print(f"❌ Failed to connect to MongoDB: {e}")
+        print("⚠️  Possible causes:")
+        print("   - MongoDB server is not running")
+        print("   - Network connectivity issues")
+        print("   - MongoDB Atlas IP whitelist restrictions")
+        print("   - Incorrect MONGODB_URI in .env file")
+        # Don't raise - allow app to start but database operations will fail gracefully
+        return None
     except Exception as e:
         print(f"❌ Failed to connect to MongoDB: {e}")
-        raise e
+        return None
 
 def close_mongo_connection():
     global client
@@ -34,6 +50,8 @@ def close_mongo_connection():
 def get_database() -> Database:
     if database is None:
         connect_to_mongo()
+    if database is None:
+        raise ConnectionFailure("MongoDB connection not available. Please check your connection settings.")
     return database
 
 # Collections
