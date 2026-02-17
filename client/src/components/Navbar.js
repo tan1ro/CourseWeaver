@@ -1,5 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
 
 export default function Navbar() {
   const linkStyles = "px-4 py-2 rounded-md text-sm font-medium transition-colors";
@@ -37,12 +38,25 @@ export default function Navbar() {
               CourseWeaver
             </NavLink>
           </div>
-          <div className="hidden md:block">
-            <div className="ml-10 flex items-baseline space-x-4">
-              <NavLink to="/course-builder" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Course Builder</NavLink>
-              <NavLink to="/evaluator" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Evaluator</NavLink>
-              <NavLink to="/book-recommender" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Book Recommender</NavLink>
-              <NavLink to="/outcome-checker" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Outcome Checker</NavLink>
+          <div className="hidden md:flex items-center gap-1">
+            <NavLink to="/course-builder" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Course Builder</NavLink>
+            <NavLink to="/evaluator" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Evaluator</NavLink>
+            <NavLink to="/book-recommender" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Book Recommender</NavLink>
+            <NavLink to="/outcome-checker" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Outcome Checker</NavLink>
+            <div className="ml-4 pl-4 border-l border-white/20 flex items-center gap-1">
+              <SignedIn>
+                <NavLink to="/profile" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>Profile</NavLink>
+                <NavLink to="/course-history" className={({ isActive }) => `${linkStyles} ${isActive ? activeLinkStyles : inactiveLinkStyles}`}>My Courses</NavLink>
+                <UserButton afterSignOutUrl="/" />
+              </SignedIn>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button className={`${linkStyles} ${inactiveLinkStyles}`}>Sign In</button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <button className="px-4 py-2 rounded-md text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white transition-colors">Sign Up</button>
+                </SignUpButton>
+              </SignedOut>
             </div>
           </div>
         </div>

@@ -92,6 +92,18 @@ courseweaver/
 MONGODB_URI=mongodb://localhost:27017/courseweaver
 GEMINI_API_KEY=your_gemini_api_key
 DATABASE_NAME=courseweaver
+
+# Clerk (optional – for login, profile, and course history)
+# Get from Clerk Dashboard → API Keys. Use "Frontend API" URL + /.well-known/jwks.json
+CLERK_JWKS_URL=https://<your-clerk-instance>.clerk.accounts.dev/.well-known/jwks.json
+```
+
+### Frontend (.env)
+Create `client/.env` with:
+```env
+REACT_APP_API_URL=http://localhost:8000
+# From Clerk Dashboard → API Keys → Publishable key
+REACT_APP_CLERK_PUBLISHABLE_KEY=pk_test_...
 ```
 
 ## 🚀 Quick Start
@@ -135,12 +147,16 @@ npm start
 
 ## 🔁 API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/generate-course` | POST | Generate complete course syllabus |
-| `/api/check-outcome` | POST | Analyze learning outcome quality |
-| `/api/upload-syllabus` | POST | Upload and evaluate course document |
-| `/api/get-books` | POST | Recommend textbooks and resources |
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/generate-course` | POST | Optional | Generate complete course syllabus (saved to user history if signed in) |
+| `/api/check-outcome` | POST | — | Analyze learning outcome quality |
+| `/api/upload-syllabus` | POST | — | Upload and evaluate course document |
+| `/api/get-books` | POST | — | Recommend textbooks and resources |
+| `/api/me` | GET | Required | Get current user profile |
+| `/api/me` | PATCH | Required | Update profile (displayName, bio) |
+| `/api/course-history` | GET | Required | List current user's generated courses |
+| `/api/course-history/{id}` | GET | Required | Get one generated course by id |
 
 ## 📋 Example Usage
 
@@ -169,9 +185,19 @@ The application uses Google Gemini Flash API for:
 - **Document Analysis**: Comprehensive syllabus evaluation and improvement suggestions
 - **Resource Recommendation**: Context-aware textbook and online resource suggestions
 
+## 🔐 Authentication (Clerk)
+
+When Clerk is configured (see env vars above):
+
+- **Sign in / Sign up** via the navbar; profile and course history are available.
+- **Profile** (`/profile`): View and edit display name and bio (stored in MongoDB).
+- **My Courses** (`/course-history`): List of courses you generated; each links to a full view.
+- **Course Builder**: If you’re signed in when generating a course, it is automatically saved to your history.
+
+Without Clerk env vars, the app runs without login; profile and history endpoints return 503.
+
 ## 🔮 Future Features
 
-- [ ] User authentication and course saving
 - [ ] Export to PDF/Word formats
 - [ ] Integration with Moodle/Google Classroom
 - [ ] Multi-language support

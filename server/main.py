@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
-from routes import course_routes, syllabus_routes, outcome_routes, book_routes
+from routes import course_routes, syllabus_routes, outcome_routes, book_routes, user_routes
 from database import connect_to_mongo, close_mongo_connection
 
 load_dotenv()
@@ -55,6 +55,7 @@ app.include_router(course_routes.router, prefix="/api", tags=["courses"])
 app.include_router(syllabus_routes.router, prefix="/api", tags=["syllabus"])
 app.include_router(outcome_routes.router, prefix="/api", tags=["outcomes"])
 app.include_router(book_routes.router, prefix="/api", tags=["books"])
+app.include_router(user_routes.router, prefix="/api", tags=["users"])
 
 @app.get("/")
 async def root():

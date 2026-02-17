@@ -65,4 +65,12 @@ def get_outcomes_collection():
     return get_database().outcomes
 
 def get_books_collection():
-    return get_database().books 
+    return get_database().books
+
+
+def get_users_collection():
+    return get_database().users
+
+
+def get_course_history_collection():
+    return get_database().course_history

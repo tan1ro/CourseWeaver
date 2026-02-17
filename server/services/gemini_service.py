@@ -33,7 +33,7 @@ def generate_course_syllabus(title: str, credits: str, ltp: str, audience: str) 
     L:T:P: {ltp}
     Audience: {audience}
 
-    Generate a JSON response with this exact structure (no additional text):
+    Generate a JSON response with this exact structure (no additional text). For each day in daily_plan, include "hours" (number of hours for that day, e.g. 3 or 4):
     {{
       "course_title": "{title}",
       "duration": "3-4 weeks",
@@ -59,12 +59,14 @@ def generate_course_syllabus(title: str, credits: str, ltp: str, audience: str) 
             {{
               "day": 1,
               "topic": "Course Introduction",
+              "hours": 3,
               "description": "Overview of course objectives and structure",
               "lab": "Environment setup and basic exercises"
             }},
             {{
               "day": 2,
               "topic": "Core Concepts",
+              "hours": 4,
               "description": "Introduction to fundamental principles",
               "lab": "Hands-on practice with basic tools"
             }}
@@ -78,12 +80,14 @@ def generate_course_syllabus(title: str, credits: str, ltp: str, audience: str) 
             {{
               "day": 1,
               "topic": "Advanced Topics",
+              "hours": 4,
               "description": "Deep dive into advanced concepts",
               "lab": "Complex problem-solving exercises"
             }},
             {{
               "day": 2,
               "topic": "Real-world Applications",
+              "hours": 3,
               "description": "Case studies and real-world examples",
               "lab": "Project-based learning activities"
             }}
@@ -191,12 +195,14 @@ def generate_course_syllabus(title: str, credits: str, ltp: str, audience: str) 
                                 {
                                     "day": 1,
                                     "topic": "Course Introduction",
+                                    "hours": 3,
                                     "description": f"Overview of {title} objectives and structure",
                                     "lab": "Environment setup and basic exercises"
                                 },
                                 {
                                     "day": 2,
                                     "topic": "Core Concepts",
+                                    "hours": 4,
                                     "description": "Introduction to fundamental principles",
                                     "lab": "Hands-on practice with basic tools"
                                 }
@@ -213,12 +219,14 @@ def generate_course_syllabus(title: str, credits: str, ltp: str, audience: str) 
                                 {
                                     "day": 1,
                                     "topic": "Advanced Topics",
+                                    "hours": 4,
                                     "description": "Deep dive into advanced concepts",
                                     "lab": "Complex problem-solving exercises"
                                 },
                                 {
                                     "day": 2,
                                     "topic": "Real-world Applications",
+                                    "hours": 3,
                                     "description": "Case studies and real-world examples",
                                     "lab": "Project-based learning activities"
                                 }

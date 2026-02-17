@@ -124,6 +124,46 @@ export default function CourseEvaluator() {
 
         {result && (
           <div className="mt-8 space-y-6">
+            {result.filename && (
+              <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
+                <h3 className="text-2xl font-bold text-white mb-4 flex items-center">
+                  <svg className="w-6 h-6 mr-3 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                  </svg>
+                  Uploaded Document
+                </h3>
+                <div className="flex flex-wrap gap-3 mb-4">
+                  <a
+                    href={API_ENDPOINTS.UPLOAD_VIEW(result.filename)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Open in new tab
+                  </a>
+                  <a
+                    href={API_ENDPOINTS.UPLOAD_VIEW(result.filename)}
+                    download={result.filename}
+                    className="inline-flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-lg font-medium transition-colors"
+                  >
+                    Download
+                  </a>
+                </div>
+                {result.filename.toLowerCase().endsWith(".pdf") ? (
+                  <div className="rounded-xl overflow-hidden border border-white/20 bg-black/20" style={{ minHeight: "60vh" }}>
+                    <iframe
+                      title="Uploaded document"
+                      src={API_ENDPOINTS.UPLOAD_VIEW(result.filename)}
+                      className="w-full h-[70vh]"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-white/70 text-sm">
+                    DOCX files can be opened in a new tab or downloaded. Preview is available for PDFs.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
               <h3 className="text-2xl font-bold text-white mb-6 flex items-center">
                 <svg className="w-6 h-6 mr-3 text-purple-400" fill="currentColor" viewBox="0 0 20 20">

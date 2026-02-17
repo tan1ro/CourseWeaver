@@ -1,7 +1,40 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import { useAuth } from "@clerk/clerk-react";
 import API_ENDPOINTS from "../config";
+import { authHeaders } from "../utils/api";
+
+// PDF layout constants (A4, mm)
+const PDF_MARGIN = 20;
+const PDF_PAGE_WIDTH = 210;
+const PDF_PAGE_HEIGHT = 297;
+const PDF_LINE_HEIGHT = 6;
+const PDF_SECTION_GAP = 8;
+
+/** Add text with word wrap; returns new y position. Optionally add new page if needed. */
+function pdfAddWrappedText(pdf, text, x, y, maxWidth, fontSize = 11) {
+  pdf.setFontSize(fontSize);
+  const lines = pdf.splitTextToSize(text, maxWidth);
+  for (const line of lines) {
+    if (y > PDF_PAGE_HEIGHT - PDF_MARGIN) {
+      pdf.addPage();
+      y = PDF_MARGIN;
+    }
+    pdf.text(line, x, y);
+    y += PDF_LINE_HEIGHT;
+  }
+  return y;
+}
+
+/** Ensure y is on current page; add new page if needed. Returns (pdf, newY). */
+function pdfEnsureSpace(pdf, y, needLines = 5) {
+  const bottom = PDF_PAGE_HEIGHT - PDF_MARGIN;
+  if (y + needLines * PDF_LINE_HEIGHT > bottom) {
+    pdf.addPage();
+    return PDF_MARGIN;
+  }
+  return y;
+}
 
 const initialForm = {
   title: "",
@@ -11,11 +44,35 @@ const initialForm = {
 };
 
 export default function CourseBuilder() {
+  const { getToken, isSignedIn } = useAuth();
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [profile, setProfile] = useState(null);
   const syllabusRef = useRef();
+
+  // Load profile (for stored logo) when signed in
+  useEffect(() => {
+    if (!isSignedIn) {
+      setProfile(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(API_ENDPOINTS.ME, { headers: authHeaders(token) });
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setProfile(data);
+        }
+      } catch {
+        if (!cancelled) setProfile(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isSignedIn, getToken]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -27,9 +84,10 @@ export default function CourseBuilder() {
     setError(null);
     setResult(null);
     try {
+      const token = await getToken();
       const res = await fetch(API_ENDPOINTS.GENERATE_COURSE, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(token),
         body: JSON.stringify(form)
       });
       
@@ -74,39 +132,205 @@ export default function CourseBuilder() {
     }
   };
 
-  const handleDownloadPDF = () => {
-    const input = syllabusRef.current;
-    if (!input) return;
-
-    html2canvas(input, { scale: 2 }).then((canvas) => {
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "p",
-        unit: "mm",
-        format: "a4",
+  const getLogoDataUrl = async () => {
+    if (!profile?.logoFilename) return null;
+    try {
+      const res = await fetch(API_ENDPOINTS.UPLOAD_VIEW(profile.logoFilename));
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
       });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const canvasWidth = canvas.width;
-      const canvasHeight = canvas.height;
-      const ratio = canvasWidth / canvasHeight;
-      const width = pdfWidth;
-      const height = width / ratio;
+    } catch {
+      return null;
+    }
+  };
 
-      let position = 0;
-      let heightLeft = height;
+  const handleDownloadPDF = async () => {
+    if (!result) return;
 
-      pdf.addImage(imgData, "PNG", 0, position, width, height);
-      heightLeft -= pdfHeight;
+    const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
+    const contentWidth = PDF_PAGE_WIDTH - 2 * PDF_MARGIN;
+    let y = PDF_MARGIN;
 
-      while (heightLeft > 0) {
-        position = heightLeft - height;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, width, height);
-        heightLeft -= pdfHeight;
+    // Logo at top (if set)
+    const logoDataUrl = await getLogoDataUrl();
+    if (logoDataUrl) {
+      const logoW = 40;
+      const logoH = 20;
+      try {
+        pdf.addImage(logoDataUrl, "PNG", PDF_MARGIN, y, logoW, logoH);
+      } catch {
+        // ignore if image format not supported
       }
-      pdf.save(`syllabus-${result?.course_title?.replace(/ /g, "_")}.pdf`);
+      y += logoH + PDF_SECTION_GAP;
+    }
+
+    // Colors: professional document (dark text on white)
+    const colorTitle = [60, 60, 80];
+    const colorHeading = [40, 40, 60];
+    const colorBody = [30, 30, 40];
+    const colorMuted = [80, 80, 100];
+
+    const setColor = (rgb) => pdf.setTextColor(...rgb);
+
+    // --- Title ---
+    pdf.setFontSize(22);
+    setColor(colorTitle);
+    const titleLines = pdf.splitTextToSize(result.course_title || "Course Syllabus", contentWidth);
+    for (const line of titleLines) {
+      pdf.text(line, PDF_MARGIN, y);
+      y += PDF_LINE_HEIGHT + 2;
+    }
+    y += PDF_SECTION_GAP;
+
+    // --- Meta (Duration, Audience) ---
+    pdf.setFontSize(11);
+    setColor(colorBody);
+    y = pdfAddWrappedText(pdf, `Duration: ${result.duration || "—"}  |  Target Audience: ${result.target_audience || "—"}`, PDF_MARGIN, y, contentWidth);
+    y += PDF_SECTION_GAP;
+
+    // --- Course Goals ---
+    y = pdfEnsureSpace(pdf, y, 8);
+    pdf.setFontSize(14);
+    setColor(colorHeading);
+    pdf.text("Course Goals", PDF_MARGIN, y);
+    y += PDF_LINE_HEIGHT + 2;
+    pdf.setFontSize(10);
+    setColor(colorBody);
+    (result.course_goals || []).forEach((goal) => {
+      y = pdfEnsureSpace(pdf, y, 3);
+      y = pdfAddWrappedText(pdf, `• ${goal}`, PDF_MARGIN + 3, y, contentWidth - 3, 10);
+      y += 2;
     });
+    y += PDF_SECTION_GAP;
+
+    // --- Tools & Technologies ---
+    y = pdfEnsureSpace(pdf, y, 10);
+    pdf.setFontSize(14);
+    setColor(colorHeading);
+    pdf.text("Tools & Technologies", PDF_MARGIN, y);
+    y += PDF_LINE_HEIGHT + 2;
+    const tools = result.tools_and_technologies || {};
+    pdf.setFontSize(10);
+    setColor(colorBody);
+    y = pdfAddWrappedText(pdf, `Programming Language: ${tools.programming_language || "—"}`, PDF_MARGIN, y, contentWidth);
+    y = pdfAddWrappedText(pdf, `Development Environment: ${tools.development_environment || "—"}`, PDF_MARGIN, y, contentWidth);
+    if (tools.key_libraries?.length) {
+      y = pdfAddWrappedText(pdf, `Key Libraries: ${tools.key_libraries.join(", ")}`, PDF_MARGIN, y, contentWidth);
+    }
+    y += PDF_SECTION_GAP;
+
+    // --- Weekly Breakdown ---
+    (result.weekly_breakdown || []).forEach((week) => {
+      y = pdfEnsureSpace(pdf, y, 15);
+      pdf.setFontSize(13);
+      setColor(colorHeading);
+      pdf.text(`Week ${week.week}: ${week.theme || ""}`, PDF_MARGIN, y);
+      y += PDF_LINE_HEIGHT + 2;
+
+      pdf.setFontSize(10);
+      setColor(colorMuted);
+      pdf.text("Learning Objectives", PDF_MARGIN + 2, y);
+      y += PDF_LINE_HEIGHT;
+      setColor(colorBody);
+      (week.learning_objectives || []).forEach((obj) => {
+        y = pdfEnsureSpace(pdf, y, 2);
+        y = pdfAddWrappedText(pdf, `• ${obj}`, PDF_MARGIN + 4, y, contentWidth - 4, 10);
+        y += 1;
+      });
+      y += 2;
+
+      setColor(colorMuted);
+      pdf.text("Daily Plan", PDF_MARGIN + 2, y);
+      y += PDF_LINE_HEIGHT;
+      setColor(colorBody);
+      (week.daily_plan || []).forEach((day) => {
+        y = pdfEnsureSpace(pdf, y, 5);
+        const dayTitle = `Day ${day.day}: ${day.topic || ""}${day.hours != null ? ` (${day.hours} ${day.hours === 1 ? "hour" : "hours"})` : ""}`;
+        pdf.setFont("helvetica", "bold");
+        y = pdfAddWrappedText(pdf, dayTitle, PDF_MARGIN + 4, y, contentWidth - 4, 10);
+        pdf.setFont("helvetica", "normal");
+        y = pdfAddWrappedText(pdf, day.description || "", PDF_MARGIN + 6, y, contentWidth - 6, 9);
+        y = pdfAddWrappedText(pdf, `Lab: ${day.lab || ""}`, PDF_MARGIN + 6, y, contentWidth - 6, 9);
+        y += 3;
+      });
+      y += PDF_SECTION_GAP;
+    });
+
+    // --- Assessment ---
+    y = pdfEnsureSpace(pdf, y, 8);
+    pdf.setFontSize(14);
+    setColor(colorHeading);
+    pdf.text("Assessment", PDF_MARGIN, y);
+    y += PDF_LINE_HEIGHT + 2;
+    pdf.setFontSize(10);
+    setColor(colorBody);
+    (result.assessment?.details || []).forEach((item) => {
+      y = pdfEnsureSpace(pdf, y, 1);
+      pdf.text(`${item.type || ""}`, PDF_MARGIN, y);
+      pdf.text(`${item.weight || ""}`, PDF_PAGE_WIDTH - PDF_MARGIN - pdf.getTextWidth(`${item.weight || ""}`), y);
+      y += PDF_LINE_HEIGHT + 1;
+    });
+    y += PDF_SECTION_GAP;
+
+    // --- Recommended Resources ---
+    y = pdfEnsureSpace(pdf, y, 10);
+    pdf.setFontSize(14);
+    setColor(colorHeading);
+    pdf.text("Recommended Resources", PDF_MARGIN, y);
+    y += PDF_LINE_HEIGHT + 2;
+    const res = result.recommended_resources || {};
+    pdf.setFontSize(10);
+    setColor(colorBody);
+    if (res.books?.length) {
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Books", PDF_MARGIN + 2, y);
+      y += PDF_LINE_HEIGHT;
+      pdf.setFont("helvetica", "normal");
+      res.books.forEach((book) => {
+        y = pdfAddWrappedText(pdf, `"${book.title || ""}" by ${book.author || ""}`, PDF_MARGIN + 4, y, contentWidth - 4, 10);
+        y += 1;
+      });
+      y += 2;
+    }
+    if (res.online_platforms?.length) {
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Online Platforms", PDF_MARGIN + 2, y);
+      y += PDF_LINE_HEIGHT;
+      pdf.setFont("helvetica", "normal");
+      y = pdfAddWrappedText(pdf, res.online_platforms.join(", "), PDF_MARGIN + 4, y, contentWidth - 4, 10);
+    }
+
+    pdf.save(`syllabus-${(result.course_title || "syllabus").replace(/ /g, "_")}.pdf`);
+  };
+
+  const handleDownloadDOCX = async () => {
+    if (!result) return;
+    try {
+      const token = await getToken();
+      const payload = { ...result, credits: form.credits, ltp: form.ltp };
+      if (profile?.logoFilename) payload.logoFilename = profile.logoFilename;
+      const res = await fetch(API_ENDPOINTS.EXPORT_COURSE_DOCX, {
+        method: "POST",
+        headers: { ...authHeaders(token), "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(res.statusText || "Export failed");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `syllabus-${(result.course_title || "syllabus").replace(/\s/g, "_")}.docx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("DOCX export failed:", err);
+      setError(err.message || "Failed to download DOCX. Try again.");
+    }
   };
 
   return (
@@ -167,6 +391,7 @@ export default function CourseBuilder() {
                 />
               </div>
             </div>
+
             <button 
               type="submit" 
               className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-purple-700 hover:to-pink-700 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" 
@@ -204,15 +429,26 @@ export default function CourseBuilder() {
                 </svg>
                 Generated Syllabus
               </h3>
-              <button 
-                onClick={handleDownloadPDF} 
-                className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transform hover:scale-105 transition-all duration-300 flex items-center"
-              >
-                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-                Download PDF
-              </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={handleDownloadPDF} 
+                  className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transform hover:scale-105 transition-all duration-300 flex items-center"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  Download PDF
+                </button>
+                <button 
+                  onClick={handleDownloadDOCX} 
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-300 flex items-center"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                  </svg>
+                  Download DOCX (template)
+                </button>
+              </div>
             </div>
             
             <div ref={syllabusRef} className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20 text-white">
@@ -292,7 +528,14 @@ export default function CourseBuilder() {
                           <div className="space-y-2">
                             {week.daily_plan?.map((day, k) => (
                               <div key={k} className="bg-white/5 rounded p-3">
-                                <strong className="text-white">Day {day.day}: {day.topic}</strong>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <strong className="text-white">Day {day.day}: {day.topic}</strong>
+                                  {day.hours != null && (
+                                    <span className="bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded text-sm font-medium">
+                                      {day.hours} {day.hours === 1 ? 'hour' : 'hours'}
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-gray-300 text-sm mt-1">{day.description}</p>
                                 <p className="text-purple-300 text-sm mt-1 italic">Lab: {day.lab}</p>
                               </div>

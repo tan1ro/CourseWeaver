@@ -49,4 +49,4 @@ async def upload_syllabus(file: UploadFile = File(...)):
     except Exception as e:
         # Log other database errors
         print(f"⚠️ Warning: Database error: {e}")
-    return result 
+    return {**result, "filename": file.filename}
